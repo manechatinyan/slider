@@ -5,11 +5,13 @@ import { BrowserModule } from '@angular/platform-browser';
 
 import { AppComponent } from './app.component';
 import {SliderComponent} from './components/slider/slider.component';
+import {DragAndDropDirective} from './@theme/directives/drag-and-drop.directive';
 
 @NgModule({
   declarations: [
     AppComponent,
-    SliderComponent
+    SliderComponent,
+    DragAndDropDirective
   ],
   imports: [
     FormsModule,
