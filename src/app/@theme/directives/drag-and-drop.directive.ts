@@ -13,32 +13,34 @@ export class DragAndDropDirective {
   @Output() mouseDownEvent: EventEmitter<void> = new EventEmitter<void>();
   @Output() mouseMoveEvent: EventEmitter<number> = new EventEmitter<number>();
 
-  private dragStarted: boolean = false;
   private percents: typeof PercentsEnum = PercentsEnum;
 
   constructor(private elementRef: ElementRef) {}
 
   @HostListener('mousedown', ['$event'])
   mousedown(e: Event): void {
-    this.dragStarted = true;
     this.mouseDownEvent.emit();
     this.moveSlider(e);
-    const eventListener = (e: Event) => {
-      e.stopPropagation();
-      this.moveSlider(e);
-    };
-    document.addEventListener('mousemove', eventListener);
+    this.handleEvents();
+  }
+
+  private handleEvents(): void {
+    const mouseMoveListener: any = this.mouseMoved.bind(this);
+    document.addEventListener('mousemove', mouseMoveListener);
     document.addEventListener('mouseup', (e: Event) => {
+      document.removeEventListener('mousemove', mouseMoveListener);
       this.dragEnd(e);
-      document.removeEventListener('mousemove', eventListener);
     });
   }
 
+  private mouseMoved(e: Event): void {
+    e.stopPropagation();
+    this.moveSlider(e);
+  }
+
   private moveSlider(e: Event): void {
-    if (this.dragStarted) {
-      const progressElRect: DOMRect = this.elementRef.nativeElement.getBoundingClientRect();
-      this.mouseMoveEvent.emit(this.setProgressWidth(e, progressElRect));
-    }
+    const progressElRect: DOMRect = this.elementRef.nativeElement.getBoundingClientRect();
+    this.mouseMoveEvent.emit(this.setProgressWidth(e, progressElRect));
   }
 
   private setProgressWidth(e: any, rect: DOMRect): number {
@@ -53,7 +55,6 @@ export class DragAndDropDirective {
 
   private dragEnd(e: Event): void {
     e.stopPropagation();
-    this.dragStarted = false;
     this.mouseUpEvent.emit();
   }
 }

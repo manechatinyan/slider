@@ -1,5 +1,7 @@
 import {Component, Input, OnInit} from '@angular/core';
 
+import {ISettings} from '../../@core/interfaces/IImage';
+import {StatusEnum} from '../../@core/enums/status.enum';
 import {PercentsEnum} from '../../@core/enums/percents.enum';
 
 @Component({
@@ -8,19 +10,21 @@ import {PercentsEnum} from '../../@core/enums/percents.enum';
 })
 export class SliderComponent implements OnInit {
   @Input() imageUrls: string[] = [];
+  @Input() settings: ISettings = {
+    speed: 2,
+    index: 0,
+    speedCoefficient: .05
+  } as ISettings;
 
-  private progressMax!: number;
-  private slideInterval!: number;
+  private slideTimeout!: number;
   private eachImageWidth!: number;
   private dragStarted: boolean = false;
-  private timeoutCoefficient: number = 1;
-  private timeoutChanged: boolean = false;
+  private statusEnum: typeof StatusEnum = StatusEnum;
   private percents: typeof PercentsEnum = PercentsEnum;
 
-  public index = 0;
-  public speed: number = 2;
   public paused: boolean = false;
   public progressWidth: number = 0;
+  public status: string = this.statusEnum.RUNNING;
 
   ngOnInit() {
     this.setAndRunSlider();
@@ -28,86 +32,84 @@ export class SliderComponent implements OnInit {
 
   private setAndRunSlider(): void {
     if (this.imageUrls?.length) {
-      this.eachImageWidth = this.progressMax = this.percents.MAX / this.imageUrls?.length;
+      this.eachImageWidth = this.percents.MAX / this.imageUrls?.length;
       this.runSlider();
     }
   }
 
-  private runSlider(): void {
-    this.slideInterval = setInterval(() => {
-      this.progressWidth += .05;
-      this.changeImages();
-      this.endSlider();
-      this.setTimeoutCoefficient();
-    }, (this.speed * 1000 * .05 * this.timeoutCoefficient) / this.eachImageWidth);
+  private runSlider(coefficient: number = 1): void {
+    this.slideTimeout = setTimeout(() => {
+      this.progressWidth += this.settings.speedCoefficient;
+      this.progressWidth >= (this.settings.index + 1) * this.eachImageWidth && ++this.settings.index;
+      this.checkStatus();
+    }, (this.settings.speed * 1000 * this.settings.speedCoefficient * coefficient) / this.eachImageWidth);
   }
 
-  private changeImages(): void {
-    if (this.progressWidth >= this.progressMax) {
-      this.index = this.imageUrls[this.index+1] ? ++this.index : this.index;
-      this.progressMax += this.eachImageWidth;
+  private checkStatus(): void {
+    this.status = this.getStatus();
+
+    switch (this.status) {
+      case StatusEnum.RUNNING:
+        this.runSlider(1);
+        break;
+      case StatusEnum.PAUSED:
+        clearTimeout(this.slideTimeout);
+        break;
+      case StatusEnum.FINISHED:
+        this.finishSlider();
+        break;
+      default:
+        this.runSlider(1);
     }
   }
 
-  private endSlider(): void {
+  private getStatus(): string {
+    if (this.paused) {
+      return this.statusEnum.PAUSED;
+    }
     if (this.progressWidth >= this.percents.MAX) {
-      this.progressWidth = this.percents.MAX;
-      this.pause();
+      return this.statusEnum.FINISHED;
     }
+    return this.statusEnum.RUNNING;
   }
 
-  private setTimeoutCoefficient(): void {
-    if (this.timeoutChanged) {
-      this.timeoutCoefficient = 1;
-      this.timeoutChanged = false;
-      this.restartInterval();
-    }
-    this.timeoutChanged = this.timeoutCoefficient != 1;
+  private finishSlider(): void {
+    this.progressWidth = this.percents.MIN;
+    this.settings.index = 0;
+    this.pause();
   }
 
-  private restartInterval(): void {
+  private restartSlider(coefficient?: number): void {
     if (!this.paused) {
-      clearInterval(this.slideInterval);
-      this.runSlider();
+      clearTimeout(this.slideTimeout);
+      this.runSlider(coefficient);
     }
   }
 
   public changeSpeed(e: any): void {
-    this.speed = +e.target.value;
-    this.restartInterval();
+    this.settings.speed = +e.target.value;
+    this.restartSlider();
   }
 
   public pause(): void {
     if (!this.dragStarted) {
       this.paused = !this.paused;
-      if (this.paused) {
-        clearInterval(this.slideInterval);
-      } else {
-        if (this.progressWidth === this.percents.MAX) {
-          this.progressWidth = this.percents.MIN;
-          this.index = 0;
-        }
-
-        this.runSlider();
-      }
+      this.checkStatus();
     }
   }
 
   public dragStart(): void {
     this.dragStarted = true;
-    clearInterval(this.slideInterval);
+    clearTimeout(this.slideTimeout);
   }
 
   public changeProgressWidth(progressWidth: number): void {
     this.progressWidth = progressWidth;
-    const movePercent: number = this.progressWidth / this.eachImageWidth;
-    this.index = Math.floor(movePercent);
-    this.progressMax = this.index * this.eachImageWidth || this.eachImageWidth;
-    this.timeoutCoefficient = movePercent % 1;
+    this.settings.index = Math.floor(this.progressWidth / this.eachImageWidth);
   }
 
   public dragEnd(): void {
     this.dragStarted = false;
-    this.restartInterval();
+    this.restartSlider(this.progressWidth / this.eachImageWidth % 1);
   }
 }
