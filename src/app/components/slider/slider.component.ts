@@ -1,150 +1,115 @@
-import {Subscription} from 'rxjs';
-import {Component, ElementRef, OnDestroy, OnInit, ViewChild} from '@angular/core';
+import {Component, Input, OnInit} from '@angular/core';
 
-import {IImagesData} from '../../@core/interfaces/IImage';
+import {ISettings} from '../../@core/interfaces/IImage';
+import {StatusEnum} from '../../@core/enums/status.enum';
 import {PercentsEnum} from '../../@core/enums/percents.enum';
-import {ImagesService} from '../../@core/services/images.service';
 
 @Component({
   selector: 'app-slider',
   templateUrl: './slider.component.html'
 })
-export class SliderComponent implements OnInit, OnDestroy {
-  @ViewChild('progress') progressEl!: ElementRef;
+export class SliderComponent implements OnInit {
+  @Input() imageUrls: string[] = [];
+  @Input() settings: ISettings = {
+    speed: 2,
+    index: 0,
+    speedCoefficient: .05
+  } as ISettings;
 
-  private progressMax!: number;
-  private sliderTimout!: number;
+  private slideTimeout!: number;
   private eachImageWidth!: number;
-  private progressInterval!: number;
-  private subscription!: Subscription;
   private dragStarted: boolean = false;
-  private timeoutCoefficient: number = 1;
-  private timeoutChanged: boolean = false;
+  private statusEnum: typeof StatusEnum = StatusEnum;
   private percents: typeof PercentsEnum = PercentsEnum;
 
-  public index = 0;
-  public speed: number = 2;
-  public imageUrls!: string[];
   public paused: boolean = false;
   public progressWidth: number = 0;
-
-  constructor(private imagesService: ImagesService) {}
+  public status: string = this.statusEnum.RUNNING;
 
   ngOnInit() {
-    this.getImages();
+    this.setAndRunSlider();
   }
 
-  ngOnDestroy() {
-    this.subscription?.unsubscribe();
-  }
-
-  private getImages(): void {
-    this.subscription = this.imagesService.getImages().subscribe((res: IImagesData) => {
-      this.imageUrls = res?.images;
-      this.eachImageWidth = this.progressMax = this.percents.MAX / this.imageUrls?.length;
+  private setAndRunSlider(): void {
+    if (this.imageUrls?.length) {
+      this.eachImageWidth = this.percents.MAX / this.imageUrls?.length;
       this.runSlider();
-      this.setProgressWidth();
-    });
-  }
-
-  private runSlider(): void {
-    this.sliderTimout = setTimeout(() => {
-      this.index = this.imageUrls[this.index+1] ? ++this.index : this.index;
-      this.paused || this.runSlider();
-    }, this.speed * 1000);
-  }
-
-  private setProgressWidth(): void {
-    this.progressInterval = setInterval(() => {
-      this.progressWidth += .05;
-      if (this.progressWidth >= this.percents.MAX) {
-        this.progressWidth = this.percents.MAX;
-        this.pause();
-      }
-      this.setTimeoutCoefficient();
-    }, (this.speed * 1000 * .05 * this.timeoutCoefficient) / this.eachImageWidth);
-  }
-
-  private setTimeoutCoefficient(): void {
-    if (this.timeoutChanged) {
-      this.timeoutCoefficient = 1;
-      this.timeoutChanged = false;
-      this.restartInterval();
     }
-    this.timeoutChanged = this.timeoutCoefficient != 1;
   }
 
-  private changeProgressWidth(e: any): void {
-    const progressElRect: DOMRect = this.progressEl.nativeElement.getBoundingClientRect();
-    this.progressWidth = this.setWidthByRange(e, progressElRect);
+  private runSlider(coefficient: number = 1): void {
+    this.slideTimeout = setTimeout(() => {
+      this.progressWidth += this.settings.speedCoefficient;
+      this.progressWidth >= (this.settings.index + 1) * this.eachImageWidth && ++this.settings.index;
+      this.checkStatus();
+    }, (this.settings.speed * 1000 * this.settings.speedCoefficient * coefficient) / this.eachImageWidth);
   }
 
-  private setWidthByRange(e: any, rect: DOMRect): number {
-    if (e.clientX >= rect.right) {
-      return this.percents.MAX;
+  private checkStatus(): void {
+    this.status = this.getStatus();
+
+    switch (this.status) {
+      case StatusEnum.RUNNING:
+        this.runSlider(1);
+        break;
+      case StatusEnum.PAUSED:
+        clearTimeout(this.slideTimeout);
+        break;
+      case StatusEnum.FINISHED:
+        this.finishSlider();
+        break;
+      default:
+        this.runSlider(1);
     }
-    if (e.clientX <= rect.left) {
-      return this.percents.MIN;
-    }
-    return (e.clientX - rect.left) / rect.width * 100;
   }
 
-  private restartInterval(): void {
-    clearInterval(this.progressInterval);
-    this.paused || this.setProgressWidth();
+  private getStatus(): string {
+    if (this.paused) {
+      return this.statusEnum.PAUSED;
+    }
+    if (this.progressWidth >= this.percents.MAX) {
+      return this.statusEnum.FINISHED;
+    }
+    return this.statusEnum.RUNNING;
+  }
+
+  private finishSlider(): void {
+    this.progressWidth = this.percents.MIN;
+    this.settings.index = 0;
+    this.pause();
+  }
+
+  private restartSlider(coefficient?: number): void {
+    if (!this.paused) {
+      clearTimeout(this.slideTimeout);
+      this.runSlider(coefficient);
+    }
   }
 
   public changeSpeed(e: any): void {
-    this.speed = +e.target.value;
-    clearInterval(this.progressInterval);
-    this.setProgressWidth();
+    this.settings.speed = +e.target.value;
+    this.restartSlider();
   }
 
   public pause(): void {
     if (!this.dragStarted) {
       this.paused = !this.paused;
-      if (this.paused) {
-        clearTimeout(this.sliderTimout);
-        clearInterval(this.progressInterval);
-      } else {
-        if (this.progressWidth === this.percents.MAX) {
-          this.progressWidth = this.percents.MIN;
-          this.index = 0;
-        }
-
-        this.runSlider();
-        this.setProgressWidth();
-      }
+      this.checkStatus();
     }
   }
 
-  public moveSlider(e: Event): void {
-    if (this.dragStarted) {
-      this.changeProgressWidth(e);
-      const movePercent: number = this.progressWidth / this.eachImageWidth;
-      this.index = Math.floor(movePercent);
-      this.timeoutCoefficient = movePercent % 1;
-    }
-  }
-
-  public dragStart(e: Event): void {
+  public dragStart(): void {
     this.dragStarted = true;
-    clearInterval(this.progressInterval);
-    this.moveSlider(e);
-    const eventListener = (e: Event) => {
-      e.stopPropagation();
-      this.moveSlider(e);
-    };
-    document.addEventListener('mousemove', eventListener);
-    document.addEventListener('mouseup', (e: Event) => {
-      this.dragEnd(e);
-      document.removeEventListener('mousemove', eventListener);
-    });
+    clearTimeout(this.slideTimeout);
   }
 
-  public dragEnd(e: Event): void {
-    e.stopPropagation();
-    this.restartInterval();
+  public changeProgressWidth(progressWidth: number): void {
+    this.progressWidth = progressWidth;
+    this.settings.index = Math.floor(this.progressWidth / this.eachImageWidth);
+  }
+
+  public dragEnd(): void {
     this.dragStarted = false;
+    this.restartSlider(this.progressWidth / this.eachImageWidth % 1);
   }
 }

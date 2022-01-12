@@ -1,16 +1,20 @@
 <div class="main">
   <div class="main--wrapper">
-    <div class="main--wrapper--images">
+    <div *ngIf="imageUrls?.length" class="main--wrapper--images">
       <div class="speed">
         <span>Speed (seconds)</span>
-        <input value="{{speed}}" (input)="changeSpeed($event)" type="number" min="1" class="speed--seconds">
+        <input value="{{settings.speed}}" (input)="changeSpeed($event)" type="number" min="1" class="speed--seconds">
       </div>
-      <div *ngIf="imageUrls?.length" (mouseup)="pause()" class="slider">
-        <img src="{{imageUrls[index]}}" alt="" class="slider--image">
+      <div (mouseup)="pause()" class="slider">
+        <img src="{{imageUrls[settings.index]}}" alt="" class="slider--image">
         <div *ngIf="paused" class="slider--pause">
           <i class="fa fa-pause"></i>
         </div>
-        <div #progress id="progress" class="slider--progress" (mousedown)="dragStart($event)">
+        <div drag-and-drop [progressWidth]="progressWidth"
+             (mouseUpEvent)="dragEnd()"
+             (mouseDownEvent)="dragStart()"
+             (mouseMoveEvent)="changeProgressWidth($event)"
+             class="slider--progress">
           <div class="slider--progress--main">
             <div [ngStyle]="{'width.%': progressWidth}" class="slider--progress--main--passed"></div>
           </div>

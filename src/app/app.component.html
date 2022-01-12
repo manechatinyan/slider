@@ -1,1 +1,1 @@
-<app-slider></app-slider>
+<app-slider *ngIf="imagesData | async as data" [imageUrls]="data.images"></app-slider>
